@@ -3,12 +3,14 @@
 namespace App\Filament\Resources\Clients\Tables;
 
 use App\Filament\Exports\DynamicGroupExport;
+use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Resources\PrimaNotaEntries\PrimaNotaEntryResource;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -54,6 +56,11 @@ class ClientsTable
                     ->tooltip(fn ($record) => $record->privacy_policy_read_at
                         ? 'Letta il: '.$record->privacy_policy_read_at->format('d/m/Y H:i')
                         : 'Non ancora letta'),
+                ToggleColumn::make('is_company')
+                    ->label('Consulente')
+                    ->tooltip('Consulente aziendale: può ricoprire ruoli dell\'organigramma')
+                    ->sortable()
+                    ->disabled(fn ($record): bool => ! ClientResource::canEdit($record)),
                 IconColumn::make('is_pep')
                     ->sortable()
                     ->label('PEP')
@@ -77,6 +84,11 @@ class ClientsTable
                 TextColumn::make('id'),
             ])
             ->filters([
+                TernaryFilter::make('is_company')
+                    ->label('Consulente aziendale')
+                    ->placeholder('Tutti')
+                    ->trueLabel('Solo consulenti')
+                    ->falseLabel('Esclusi i consulenti'),
                 // Filtro per tipologia
                 TernaryFilter::make('is_person')
                     ->label('Tipo Soggetto')
