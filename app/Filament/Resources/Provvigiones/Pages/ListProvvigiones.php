@@ -3,10 +3,7 @@
 namespace App\Filament\Resources\Provvigiones\Pages;
 
 use App\Filament\Resources\Provvigiones\ProvvigioneResource;
-use App\Jobs\ImportaDaMediafacile;
 use App\Models\User;
-use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Illuminate\Contracts\Support\Htmlable;  // CORRETTO
 use Illuminate\Support\HtmlString;
@@ -14,23 +11,6 @@ use Illuminate\Support\HtmlString;
 class ListProvvigiones extends ListRecords
 {
     protected static string $resource = ProvvigioneResource::class;
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('importaDaMediafacile')
-                ->label('Importa da Mediafacile')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->requiresConfirmation()
-                ->modalDescription('Importa pratiche e provvigioni degli ultimi '.ImportaDaMediafacile::GIORNI.' giorni. Al termine arriva la notifica con l\'esito.')
-                ->visible(fn (): bool => static::puoImportare(auth()->user()))
-                ->action(function (): void {
-                    ImportaDaMediafacile::dispatch();
-
-                    Notification::make()->title('Importazione avviata')->success()->send();
-                }),
-        ];
-    }
 
     /**
      * Admin e super admin, oppure dipendenti con ruolo «contabile» o «contabile responsabile».

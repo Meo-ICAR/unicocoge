@@ -5,6 +5,8 @@ namespace App\Filament\Resources\Provvigiones\Tables;
 use App\Filament\Actions\QuickExcelExportAction;
 use App\Filament\Exports\DynamicGroupExport;
 use App\Filament\Resources\Praticas\PraticaResource;
+use App\Filament\Resources\Provvigiones\Pages\ListProvvigiones;
+use App\Jobs\ImportaDaMediafacile;
 use App\Models\Compenso;
 use App\Models\Proforma;
 use App\Models\Provvigione;
@@ -49,6 +51,17 @@ class ProvvigionesTable
                 fn (Model $record): bool => $record->stato === 'Inserito' && $record->piva != null && ((strlen($record->piva) == 11) || (strlen($record->piva) == 16))
             )
             ->headerActions([
+                Action::make('importaDaMediafacile')
+                    ->label('Importa da Mediafacile')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->requiresConfirmation()
+                    ->modalDescription('Importa pratiche e provvigioni degli ultimi '.ImportaDaMediafacile::GIORNI.' giorni. Al termine arriva la notifica con l\'esito.')
+                    ->visible(fn (): bool => ListProvvigiones::puoImportare(auth()->user()))
+                    ->action(function (): void {
+                        ImportaDaMediafacile::dispatch();
+
+                        Notification::make()->title('Importazione avviata')->success()->send();
+                    }),
                 ExportAction::make()
                     ->exports([
                         DynamicGroupExport::make()

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PurchaseInvoices;
 
+use App\Filament\Resources\Provvigiones\ProvvigioneResource;
 use App\Filament\Resources\PurchaseInvoices\Pages\CreatePurchaseInvoice;
 use App\Filament\Resources\PurchaseInvoices\Pages\EditPurchaseInvoice;
 use App\Filament\Resources\PurchaseInvoices\Pages\ListPurchaseInvoices;
@@ -50,7 +51,9 @@ class PurchaseInvoiceResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        return static::lastLoadedAt()?->format('d/m/Y');
+        $lastLoadedAt = static::lastLoadedAt();
+
+        return $lastLoadedAt ? ProvvigioneResource::formatBadgeDate($lastLoadedAt) : null;
     }
 
     public static function getNavigationBadgeTooltip(): ?string

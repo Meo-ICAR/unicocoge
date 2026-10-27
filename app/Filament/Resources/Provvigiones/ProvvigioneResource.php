@@ -70,19 +70,23 @@ class ProvvigioneResource extends Resource
     }
 
     /**
-     * Data e ora dell'ultima importazione, nel formato «Ott. 27 13:30».
+     * Formato dei badge «ultimo aggiornamento» nel menu, es. «Ott. 27 13:30».
+     */
+    public static function formatBadgeDate(Carbon $data): string
+    {
+        $data = $data->copy()->locale('it');
+
+        return ucfirst(rtrim($data->translatedFormat('M'), '.')).'. '.$data->format('j H:i');
+    }
+
+    /**
+     * Data e ora dell'ultima importazione.
      */
     public static function ultimoAggiornamento(): ?string
     {
         $ultimo = Provvigione::max('upload_at');
 
-        if (! $ultimo) {
-            return null;
-        }
-
-        $data = Carbon::parse($ultimo)->locale('it');
-
-        return ucfirst(rtrim($data->translatedFormat('M'), '.')).'. '.$data->format('j H:i');
+        return $ultimo ? static::formatBadgeDate(Carbon::parse($ultimo)) : null;
     }
 
     public static function getNavigationBadge(): ?string

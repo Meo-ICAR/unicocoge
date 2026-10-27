@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SalesInvoices;
 
+use App\Filament\Resources\Provvigiones\ProvvigioneResource;
 use App\Filament\Resources\SalesInvoices\Pages\CreateSalesInvoice;
 use App\Filament\Resources\SalesInvoices\Pages\EditSalesInvoice;
 use App\Filament\Resources\SalesInvoices\Pages\ListSalesInvoices;
@@ -48,7 +49,9 @@ class SalesInvoiceResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        return static::lastLoadedAt()?->format('d/m/Y');
+        $lastLoadedAt = static::lastLoadedAt();
+
+        return $lastLoadedAt ? ProvvigioneResource::formatBadgeDate($lastLoadedAt) : null;
     }
 
     public static function getNavigationBadgeTooltip(): ?string
