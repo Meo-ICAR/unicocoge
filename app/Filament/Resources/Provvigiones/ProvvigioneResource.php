@@ -76,7 +76,7 @@ class ProvvigioneResource extends Resource
     {
         $data = $data->copy()->locale('it');
 
-        return ucfirst(rtrim($data->translatedFormat('M'), '.')).'. '.$data->format('j H:i');
+        return ucfirst(rtrim($data->translatedFormat('M'), '.')).'. '.$data->format('d H:i');
     }
 
     /**
