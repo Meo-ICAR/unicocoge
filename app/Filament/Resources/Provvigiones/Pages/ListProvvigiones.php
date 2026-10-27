@@ -4,13 +4,11 @@ namespace App\Filament\Resources\Provvigiones\Pages;
 
 use App\Filament\Resources\Provvigiones\ProvvigioneResource;
 use App\Jobs\ImportaDaMediafacile;
-use App\Models\Provvigione;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Illuminate\Contracts\Support\Htmlable;  // CORRETTO
-use Illuminate\Support\Carbon;
 use Illuminate\Support\HtmlString;
 
 class ListProvvigiones extends ListRecords
@@ -57,13 +55,6 @@ class ListProvvigiones extends ListRecords
     {
         // $record = $this->getRecord();
 
-        $ultimo = Provvigione::max('upload_at');
-        $data = $ultimo ? Carbon::parse($ultimo)->locale('it') : null;
-        $badge = $ultimo
-            ? '<span class="fi-badge fi-color fi-color-gray" style="display:inline-block;padding:2px 10px;border-radius:9999px;background:#e5e7eb;color:#374151;font-size:.75rem">Ultimo aggiornamento: '
-                .e(ucfirst(rtrim($data->translatedFormat('M'), '.')).'. '.$data->format('j H:i')).'</span><br>'
-            : '';
-
-        return new HtmlString($badge."Selezionando le provvigioni di cui si vuole emettere proforma comparira il tasto EMETTI PROFORMA.<br> Premendo il tasto verranno creati i  proforma relativi alle provvigioni selezionate . Per sospendere al mese prossimo una provvigione cliccare sul simbolo prima di 'Inserito'");
+        return new HtmlString("Selezionando le provvigioni di cui si vuole emettere proforma comparira il tasto EMETTI PROFORMA.<br> Premendo il tasto verranno creati i  proforma relativi alle provvigioni selezionate . Per sospendere al mese prossimo una provvigione cliccare sul simbolo prima di 'Inserito'");
     }
 }

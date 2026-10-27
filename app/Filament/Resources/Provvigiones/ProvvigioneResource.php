@@ -20,6 +20,7 @@ use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Carbon;
 use UnitEnum;
 
 class ProvvigioneResource extends Resource
@@ -66,6 +67,37 @@ class ProvvigioneResource extends Resource
     public static function table(Table $table): Table
     {
         return ProvvigionesTable::configure($table);
+    }
+
+    /**
+     * Data e ora dell'ultima importazione, nel formato «Ott. 27 13:30».
+     */
+    public static function ultimoAggiornamento(): ?string
+    {
+        $ultimo = Provvigione::max('upload_at');
+
+        if (! $ultimo) {
+            return null;
+        }
+
+        $data = Carbon::parse($ultimo)->locale('it');
+
+        return ucfirst(rtrim($data->translatedFormat('M'), '.')).'. '.$data->format('j H:i');
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        return static::ultimoAggiornamento();
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return 'Ultimo aggiornamento';
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'gray';
     }
 
     public static function getNavigationItems(): array
