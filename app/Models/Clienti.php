@@ -5,11 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Unico\Core\Models\Cliente as CoreCliente;
+use Unico\Core\Models\Document;
 
 /**
  * @property string $id
@@ -71,6 +73,17 @@ class Clienti extends CoreCliente
         return $query->where('is_active', true)
             ->where('is_dummy', false)
             ->where(fn (Builder $query) => $query->whereNull('piva')->orWhere('piva', ''));
+    }
+
+    /**
+     * Documenti della banca (linguetta Documenti della scheda, dettagli inviati dalla banca). Non è un morphMany: gli indirizzi di questo
+     * modello sono salvati con la classe come tipo, i documenti con l'alias del core (`cliente`, o la grafia storica `clienti`).
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class, 'documentable_id')
+            ->whereIn('documentable_type', ['cliente', 'clienti'])
+            ->withAttributes(['documentable_type' => 'cliente'], asConditions: false);
     }
 
     /**

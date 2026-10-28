@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Provvigiones\Tables;
 
+use App\Filament\Actions\CaricaProformaBancaAction;
 use App\Filament\Actions\QuickExcelExportAction;
 use App\Filament\Exports\DynamicGroupExport;
 use App\Filament\Resources\Praticas\PraticaResource;
@@ -47,6 +48,7 @@ class AttiveTable
                 fn (Model $record): bool => $record->stato === 'Inserito'
             )
             ->headerActions([
+                CaricaProformaBancaAction::make(),
                 ExportAction::make()
                     ->exports([
                         DynamicGroupExport::make()
@@ -75,21 +77,7 @@ class AttiveTable
                     ->action(function (Collection $records, array $data) {
                         $dataEmissione = $data['data_emissione'];
 
-                        // Process each record with a visible loop
-                        $records->each(function ($record) use ($dataEmissione) {
-                            $proforma = Proforma::createFromIstitutoFinanziario($record->istituto_finanziario, $dataEmissione);
-                            $record->update([
-                                'stato' => 'Proforma',
-                                //  'data_fattura' => $dataEmissione,
-                                'proforma_id' => $proforma->id,
-                                'piva' => $proforma->vat_number,
-                            ]);
-                            $compenso = $proforma->compenso;
-                            $compenso += $record->importo;
-                            $proforma->update([
-                                'compenso' => $compenso,
-                            ]);
-                        });
+                        Proforma::associaProvvigioni($records, $dataEmissione);
 
                         // Show success notification with count and date
                         Notification::make()

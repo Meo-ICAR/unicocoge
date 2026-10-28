@@ -306,6 +306,28 @@ class Proforma extends Model
     }
 
     /**
+     * Abbina le provvigioni attive all'ultimo proforma dell'istituto emesso alla data (lo crea se manca) e ne somma l'importo al compenso.
+     *
+     * @param  iterable<Provvigione>  $provvigioni
+     */
+    public static function associaProvvigioni(iterable $provvigioni, string $dataEmissione): ?Proforma
+    {
+        $proforma = null;
+
+        foreach ($provvigioni as $provvigione) {
+            $proforma = self::createFromIstitutoFinanziario($provvigione->istituto_finanziario, $dataEmissione);
+            $provvigione->update([
+                'stato' => 'Proforma',
+                'proforma_id' => $proforma->id,
+                'piva' => $proforma->vat_number,
+            ]);
+            $proforma->update(['compenso' => $proforma->compenso + $provvigione->importo]);
+        }
+
+        return $proforma;
+    }
+
+    /**
      * Find or create a proforma for a fornitore by P.IVA and return its ID
      *
      * @param  string  $piva  The VAT number to search for

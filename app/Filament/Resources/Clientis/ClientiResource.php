@@ -18,6 +18,7 @@ use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Unico\Core\Filament\RelationManagers\DocumentsRelationManager;
 use UnitEnum;
 
 class ClientiResource extends Resource
@@ -55,7 +56,7 @@ class ClientiResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            DocumentsRelationManager::class,
         ];
     }
 
