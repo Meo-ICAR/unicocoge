@@ -93,8 +93,10 @@ class ImportaProformaBancaTest extends TestCase
         $this->assertSame(DocumentStatus::ANOMALY, $esito->documento->status);
         $this->assertStringContainsString('la banca riconosce € 180,00', $esito->documento->rejection_note);
         $this->assertSame(['Inserito'], Provvigione::pluck('stato')->unique()->all());
+        $this->assertSame('BK-77', Pratica::where('codice_pratica', 'QT1')->value('codice_pratica_banca'));
         $this->assertSame('BK-88', Pratica::where('codice_pratica', 'QT2')->value('codice_pratica_banca'));
         $this->assertSame(0, Proforma::count());
+        $this->assertStringContainsString('proforma non creato e provvigioni non associate', $esito->documento->internal_notes);
     }
 
     public function test_a_file_that_matches_no_active_commission_is_refused(): void

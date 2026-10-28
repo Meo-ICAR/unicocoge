@@ -41,21 +41,22 @@ class ImportaProformaBanca
 
         $difformita = [];
         $daAssociare = collect();
+        $stornoDaRegistrare = [];
+        $codiciDaAggiornare = [];
 
         foreach ($abbinamenti as $numero => $abbinamento) {
             $descrizione = $this->descrivi($numero + 1, $abbinamento['riga']);
             $provvigioni = $abbinamento['provvigioni'];
 
             if ($provvigioni->isEmpty() && $abbinamento['originale'] !== null && $abbinamento['originale']->istituto_finanziario === $banca) {
-                $storno = $this->registraStorno($abbinamento['originale'], $abbinamento['riga']);
-
-                if ($storno === null) {
+                if ($this->stornoEsiste($abbinamento['originale'])) {
                     $difformita[] = "{$descrizione}: lo storno della provvigione {$abbinamento['originale']->id} è già registrato e non è più tra le attive.";
-
-                    continue;
+                } else {
+                    $stornoDaRegistrare[] = [$abbinamento['originale'], $abbinamento['riga']];
+                    $codiciDaAggiornare[] = [$abbinamento['originale']->id_pratica, $abbinamento['riga']];
                 }
 
-                $provvigioni = collect([$storno]);
+                continue;
             }
 
             if ($provvigioni->isEmpty()) {
@@ -72,7 +73,7 @@ class ImportaProformaBanca
                 continue;
             }
 
-            $this->aggiornaCodiceBanca($provvigioni->first(), $abbinamento['riga']);
+            $codiciDaAggiornare[] = [$provvigioni->first()->id_pratica, $abbinamento['riga']];
 
             $attesa = $provvigioni->sum(fn (Provvigione $p): float => (float) $p->importo);
 
@@ -85,10 +86,22 @@ class ImportaProformaBanca
             $daAssociare = $daAssociare->concat($provvigioni);
         }
 
-        $documento = $this->archivia($cliente, $contenuto, $nomeFile, $this->note($righe, $daAssociare, $difformita, $dataEmissione), $difformita);
-        $proforma = $difformita === [] ? Proforma::associaProvvigioni($daAssociare, $dataEmissione) : null;
+        $abbinate = $daAssociare->count() + count($stornoDaRegistrare);
+        $documento = $this->archivia($cliente, $contenuto, $nomeFile, $this->note($righe, $abbinate, $difformita, $dataEmissione), $difformita);
+        $proforma = null;
 
-        return new EsitoImportProformaBanca($documento, $banca, count($righe), $daAssociare->count(), $difformita, $proforma);
+        $storni = collect($stornoDaRegistrare)->map(fn (array $s): Provvigione => $this->registraStorno(...$s));
+
+        foreach ($codiciDaAggiornare as [$codicePratica, $riga]) {
+            $this->aggiornaCodiceBanca($codicePratica, $riga);
+        }
+
+        // Con difformità il proforma non si crea e nessuna provvigione si associa: prima vanno rimosse, poi si ricarica il file.
+        if ($difformita === []) {
+            $proforma = Proforma::associaProvvigioni($daAssociare->concat($storni), $dataEmissione);
+        }
+
+        return new EsitoImportProformaBanca($documento, $banca, count($righe), $abbinate, $difformita, $proforma);
     }
 
     /**
@@ -198,17 +211,19 @@ class ImportaProformaBanca
             ->first();
     }
 
+    /** Lo storno di una provvigione esiste già, anche se non è più attivo: non si duplica. */
+    private function stornoEsiste(Provvigione $originale): bool
+    {
+        return Provvigione::withTrashed()->whereKey($originale->id.'-')->exists();
+    }
+
     /**
      * Aggiunge lo storno tra le provvigioni attive come fa l'import: stessa pratica e istituto dell'originale, id dell'originale con «-»,
-     * importo negativo, «Inserito». Se esiste già (anche non più attivo) non lo duplica e ritorna null.
+     * importo negativo, «Inserito».
      */
-    private function registraStorno(Provvigione $originale, RigaProformaBanca $riga): ?Provvigione
+    private function registraStorno(Provvigione $originale, RigaProformaBanca $riga): Provvigione
     {
         $id = $originale->id.'-';
-
-        if (Provvigione::withTrashed()->whereKey($id)->exists()) {
-            return null;
-        }
 
         $storno = $originale->replicate();
         $storno->forceFill([
@@ -271,15 +286,15 @@ class ImportaProformaBanca
         return $banca ?? throw new RuntimeException('Impossibile dedurre la banca: nessuna riga del file corrisponde a una provvigione attiva.');
     }
 
-    private function aggiornaCodiceBanca(Provvigione $provvigione, RigaProformaBanca $riga): void
+    private function aggiornaCodiceBanca(?string $codicePratica, RigaProformaBanca $riga): void
     {
         $codice = $riga->codicePratica;
 
-        if (blank($codice) || blank($provvigione->id_pratica)) {
+        if (blank($codice) || blank($codicePratica)) {
             return;
         }
 
-        $pratica = Pratica::query()->where('codice_pratica', $provvigione->id_pratica)->first();
+        $pratica = Pratica::query()->where('codice_pratica', $codicePratica)->first();
 
         if ($pratica !== null && $pratica->codice_pratica !== $codice && $pratica->codice_pratica_banca !== $codice) {
             $pratica->update(['codice_pratica_banca' => $codice]);
@@ -314,13 +329,13 @@ class ImportaProformaBanca
      * @param  Collection<int, Provvigione>  $abbinate
      * @param  list<string>  $difformita
      */
-    private function note(array $righe, Collection $abbinate, array $difformita, string $dataEmissione): string
+    private function note(array $righe, int $abbinate, array $difformita, string $dataEmissione): string
     {
-        $testa = sprintf('Dettaglio banca importato il %s: %d righe, %d provvigioni abbinate.', now()->format('d/m/Y H:i'), count($righe), $abbinate->count());
+        $testa = sprintf('Dettaglio banca importato il %s: %d righe, %d provvigioni abbinate.', now()->format('d/m/Y H:i'), count($righe), $abbinate);
 
         return $difformita === []
             ? $testa."\nNessuna difformità: proforma del ".Carbon::parse($dataEmissione)->format('d/m/Y').' creato.'
-            : $testa."\nDifformità (".count($difformita)."), proforma non creato:\n- ".implode("\n- ", $difformita);
+            : $testa."\nDifformità (".count($difformita).'): proforma non creato e provvigioni non associate (i codici pratica banca sono aggiornati). Rimuovere le difformità e ricaricare il file:'."\n- ".implode("\n- ", $difformita);
     }
 
     private function descrivi(int $numero, RigaProformaBanca $riga): string
