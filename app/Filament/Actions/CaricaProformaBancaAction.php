@@ -67,12 +67,11 @@ class CaricaProformaBancaAction
                     return;
                 }
 
-                $mostrate = array_slice($esito->difformita, 0, 5);
-                $altre = count($esito->difformita) - count($mostrate);
+                $anomalie = collect($esito->anomalie())->map(fn (int $n, string $tipo): string => "{$tipo}: {$n}")->implode("\n");
 
                 Notification::make()->warning()
                     ->title('Proforma banca: '.count($esito->difformita).' difformità, proforma non creato')
-                    ->body("Per le difformità il proforma non è stato creato e nessuna provvigione è stata associata. I codici pratica banca sono stati aggiornati. Rimuovi prima le difformità e ricarica il file.\n\n".implode("\n", $mostrate).($altre > 0 ? "\n… e altre {$altre} nel documento." : ''))
+                    ->body("Per le difformità il proforma non è stato creato e nessuna provvigione è stata associata. I codici pratica banca sono stati aggiornati. Rimuovi prima le difformità e ricarica il file. Il dettaglio per riga è nel documento.\n\n".$anomalie)
                     ->actions([$apri])->persistent()->send();
             });
     }
