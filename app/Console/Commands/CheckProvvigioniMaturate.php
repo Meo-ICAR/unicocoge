@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Enums\Severity;
+use App\Models\Fornitore;
 use App\Models\Provvigione;
 use App\Services\CheckStatus;
 use Illuminate\Support\Collection;
@@ -20,12 +21,40 @@ class CheckProvvigioniMaturate extends StatusCheckCommand
 
     public function checkStatus(): CheckStatus
     {
-        $maturate = Provvigione::query()
+        return $this->statusOf($this->maturate());
+    }
+
+    /**
+     * Se l'email è di un fornitore (agente) il dettaglio riguarda solo le sue provvigioni; per chiunque altro resta l'elenco completo.
+     */
+    public function checkStatusForRecipient(string $email): CheckStatus
+    {
+        $piva = Fornitore::query()->where('email', $email)->whereNotNull('piva')->value('piva');
+
+        if (blank($piva)) {
+            return $this->checkStatus();
+        }
+
+        return $this->statusOf($this->maturate()->where('piva', $piva)->values());
+    }
+
+    /**
+     * @return Collection<int, Provvigione>
+     */
+    private function maturate(): Collection
+    {
+        return Provvigione::query()
             ->where('status_compenso', 'Pratica perfezionata')
             ->where('stato', 'Inserito')
             ->orderBy('tipo')->orderBy('denominazione_riferimento')->orderBy('id_pratica')
             ->get();
+    }
 
+    /**
+     * @param  Collection<int, Provvigione>  $maturate
+     */
+    private function statusOf(Collection $maturate): CheckStatus
+    {
         if ($maturate->isEmpty()) {
             return new CheckStatus(0, Severity::Ok, 'Nessuna provvigione maturata da lavorare.');
         }

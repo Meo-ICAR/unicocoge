@@ -14,6 +14,15 @@ abstract class StatusCheckCommand extends Command
 {
     abstract public function checkStatus(): CheckStatus;
 
+    /**
+     * Stato per un destinatario preciso (email): di default coincide con quello generale; i controlli
+     * con un elenco per beneficiario lo restringono ai suoi dati.
+     */
+    public function checkStatusForRecipient(string $email): CheckStatus
+    {
+        return $this->checkStatus();
+    }
+
     public function handle(): int
     {
         $status = $this->checkStatus();
