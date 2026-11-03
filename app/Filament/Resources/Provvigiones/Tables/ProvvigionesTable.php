@@ -178,7 +178,7 @@ class ProvvigionesTable
                 TextColumn::make('id_pratica')
                     ->label('Pratica')
                     ->color('info')
-                    ->url(fn ($record) => PraticaResource::getUrl('view', ['record' => $record->id_pratica]))
+                    ->url(fn ($record) => $record->pratica_id ? PraticaResource::getUrl('view', ['record' => $record->pratica_id]) : null)
                     ->openUrlInNewTab()
                     ->sortable()
                     ->searchable(),
@@ -198,6 +198,7 @@ class ProvvigionesTable
                         'Escluso' => 'Escluso',
                         'Fatturato' => 'Fatturato',
                         'Stornato' => 'Stornato',
+                        'Anomalo' => 'Anomalo',
                     ])
                     ->multiple()
                     ->default(['Inserito', 'Sospeso'])

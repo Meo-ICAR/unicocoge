@@ -35,6 +35,10 @@ return [
         'redirect' => env('MICROSOFT_REDIRECT_URI'),
         'proxy' => env('PROXY'),  // Optional, will be used for all requests
     ],
+    'sharepoint_proforma' => [
+        // Cartella sotto la radice del drive SharePoint (credenziali SHARE_* del pacchetto unico-core) che raccoglie i dettagli delle banche: PROFORMA / <banca>
+        'root' => env('PROFORMA_SHAREPOINT_ROOT', 'PROFORMA'),
+    ],
     'bpm' => [
         'url' => env('BPM_API_URL'),
         // Chiave condivisa richiesta (header X-Api-Key) per autenticare le chiamate di UnicoBPM

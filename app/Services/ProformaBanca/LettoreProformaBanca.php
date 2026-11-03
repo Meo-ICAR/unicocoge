@@ -15,10 +15,13 @@ use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use RuntimeException;
+use Smalot\PdfParser\Parser;
+use Throwable;
 
 /**
- * Legge il dettaglio delle pratiche di una banca. CSV ed Excel si leggono dalle colonne (intestazioni riconosciute per sinonimo),
- * immagini e PDF li legge l'AI e restituisce le stesse righe.
+ * Legge il dettaglio delle pratiche di una banca. Prima si prova con i modelli noti (regex sul testo di PDF e TXT, intestazioni dei fogli
+ * Excel), poi CSV ed Excel si leggono dalle colonne (intestazioni riconosciute per sinonimo); immagini e PDF di modello sconosciuto
+ * li legge l'AI e restituisce le stesse righe.
  */
 class LettoreProformaBanca
 {
@@ -38,16 +41,42 @@ class LettoreProformaBanca
     public function leggi(string $contenuto, string $nomeFile, string $mime): array
     {
         $estensione = strtolower(pathinfo($nomeFile, PATHINFO_EXTENSION));
+        $modelli = new ModelliProformaBanca;
 
         if (in_array($estensione, ['csv', 'txt'], true)) {
-            return $this->righe($this->righeCsv($contenuto));
+            $righe = $modelli->leggiTesto($this->testoUtf8($contenuto));
+
+            return $righe !== [] ? $righe : $this->righe($this->righeCsv($contenuto));
         }
 
         if (in_array($estensione, ['xlsx', 'xls', 'ods'], true)) {
-            return $this->righe($this->righeExcel($contenuto, $estensione));
+            $tabella = $this->righeExcel($contenuto, $estensione);
+
+            return $modelli->leggiTabella($tabella) ?: $this->righe($tabella);
+        }
+
+        if (! str_starts_with($mime, 'image/') && ($righe = $modelli->leggiTesto($this->testoPdf($contenuto))) !== []) {
+            return $righe;
         }
 
         return $this->leggiConAi($contenuto, $mime);
+    }
+
+    private function testoUtf8(string $contenuto): string
+    {
+        $contenuto = preg_replace('/^\xEF\xBB\xBF/', '', $contenuto) ?? $contenuto;
+
+        return mb_check_encoding($contenuto, 'UTF-8') ? $contenuto : mb_convert_encoding($contenuto, 'UTF-8', 'ISO-8859-1');
+    }
+
+    /** Testo di un PDF; vuoto se è una scansione o non si legge (allora tocca all'AI). */
+    private function testoPdf(string $contenuto): string
+    {
+        try {
+            return (new Parser)->parseContent($contenuto)->getText();
+        } catch (Throwable) {
+            return '';
+        }
     }
 
     /** Numero in formato italiano o inglese («1.234,56», «1234.56», «€ 12,5»). */

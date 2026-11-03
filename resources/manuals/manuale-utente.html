@@ -46,7 +46,9 @@
     <h3 id="1-2-provvigioni-attive-entrate-dagli-istituti">1.2 Provvigioni attive (entrate dagli istituti)</h3>
     <p>Dal menu <em>Provvigioni attive</em>: quanto gli istituti finanziari devono alla società, con gli stessi filtri della vista passiva. Si selezionano le provvigioni del proforma fornito dalla banca (importate) e la data del proforma. Nell’abbinamento alle fatture attive potranno essere abbinati <strong>solo i proforma con data successiva alla data di registrazione della fattura</strong>. Le provvigioni dei clienti si abbinano da sole alle fatture attive.</p>
 
-    <h2 id="2-proforma-e-pagamenti">2. Proforma e pagamenti</h2>
+        <p><strong>Carica Proforma Banca.</strong> Il pulsante in alto carica il dettaglio inviato dalla banca (PDF, Excel, TXT/CSV o immagine). Il programma individua la banca, archivia il file tra i documenti della banca e su SharePoint (cartella <em>PROFORMA / nome banca</em>) se non c’è già, legge le pratiche e, se il codice pratica della banca è vuoto, lo compila. Poi confronta ogni provvigione degli istituti con l’importo riconosciuto dalla banca: se coincide (qualunque sia il suo stato) passa a <em>Proforma</em>, altrimenti ad <em>Anomalo</em> (le anomalie restano visibili nell’elenco e nel documento della banca). Se tutto torna si crea anche il proforma. Dopo aver corretto le anomalie si può ricaricare lo stesso file.</p>
+
+<h2 id="2-proforma-e-pagamenti">2. Proforma e pagamenti</h2>
     <p>Il proforma è il documento intermedio che precede la fattura elettronica e dice al produttore quanto può fatturare. Stati: <em>Inserito</em>, <em>Spedito</em>, <em>Pagato</em>, <em>Annullato</em>; tipi: Agente, Istituto, Cliente.</p>
     <ul>
         <li><strong>Invia email proforma</strong>: invio reale al produttore. <strong>Simulazione invio</strong>: l’email arriva a te, per controllare impaginazione e calcoli.</li>

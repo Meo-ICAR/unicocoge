@@ -17,14 +17,15 @@ use Unico\Core\Models\DocumentType;
 use Unico\Core\MorphMap;
 
 /**
- * Importa il dettaglio delle pratiche inviato da una banca: lo abbina alle provvigioni attive, lo archivia tra i documenti della banca,
- * aggiorna il codice pratica banca e ne confronta gli importi. Il proforma si crea solo se non ci sono difformità.
+ * Importa il dettaglio delle pratiche inviato da una banca: lo abbina alle provvigioni degli istituti, lo archivia tra i documenti della
+ * banca (e in SharePoint, PROFORMA / <banca>), aggiorna il codice pratica banca se vuoto e ne confronta gli importi: le provvigioni che
+ * tornano (qualunque sia il loro stato) passano a «Proforma», le altre ad «Anomalo»: così il file si può ricaricare senza nuove anomalie. Il proforma si crea solo se non ci sono difformità.
  */
 class ImportaProformaBanca
 {
     public const TIPO_DOCUMENTO = 'PROFORMA_BANCA';
 
-    public function __construct(private LettoreProformaBanca $lettore) {}
+    public function __construct(private LettoreProformaBanca $lettore, private CartelleProformaSharePoint $sharePoint) {}
 
     public function importa(string $contenuto, string $nomeFile, string $mime, string $dataEmissione): EsitoImportProformaBanca
     {
@@ -35,11 +36,12 @@ class ImportaProformaBanca
         }
 
         $abbinamenti = $this->abbina($righe);
-        $banca = $this->bancaPrevalente($abbinamenti);
+        $banca = $this->bancaPrevalente($abbinamenti, $nomeFile);
         $cliente = Clienti::query()->where('name', $banca)->first()
             ?? throw new RuntimeException("Banca «{$banca}» non trovata tra i clienti.");
 
         $difformita = [];
+        $anomale = collect();
         $daAssociare = collect();
         $stornoDaRegistrare = [];
         $codiciDaAggiornare = [];
@@ -69,6 +71,7 @@ class ImportaProformaBanca
 
             if ($altraBanca !== null) {
                 $difformita[] = "{$descrizione}: la provvigione attiva è di un'altra banca ({$altraBanca->istituto_finanziario}).";
+                $anomale = $anomale->concat($provvigioni);
 
                 continue;
             }
@@ -79,6 +82,7 @@ class ImportaProformaBanca
 
             if ($this->centesimi($attesa) !== $this->centesimi($abbinamento['riga']->importo)) {
                 $difformita[] = sprintf('%s: la banca riconosce € %s, la provvigione attiva è € %s.', $descrizione, $this->euro($abbinamento['riga']->importo), $this->euro($attesa));
+                $anomale = $anomale->concat($provvigioni);
 
                 continue;
             }
@@ -91,6 +95,7 @@ class ImportaProformaBanca
         $proforma = null;
 
         $storni = collect($stornoDaRegistrare)->map(fn (array $s): Provvigione => $this->registraStorno(...$s));
+        $congruenti = $daAssociare->concat($storni);
 
         foreach ($codiciDaAggiornare as [$codicePratica, $riga]) {
             $this->aggiornaCodiceBanca($codicePratica, $riga);
@@ -98,8 +103,11 @@ class ImportaProformaBanca
 
         // Con difformità il proforma non si crea e nessuna provvigione si associa: prima vanno rimosse, poi si ricarica il file.
         if ($difformita === []) {
-            $proforma = Proforma::associaProvvigioni($daAssociare->concat($storni), $dataEmissione);
+            $proforma = Proforma::associaProvvigioni($congruenti->whereNull('proforma_id'), $dataEmissione);
         }
+
+        $anomale->each(fn (Provvigione $p) => $p->update(['stato' => 'Anomalo']));
+        $congruenti->each(fn (Provvigione $p) => $p->update(['stato' => 'Proforma']));
 
         return new EsitoImportProformaBanca($documento, $banca, count($righe), $abbinate, $difformita, $proforma);
     }
@@ -141,7 +149,7 @@ class ImportaProformaBanca
     /** @return Collection<int, Provvigione> */
     private function candidate(RigaProformaBanca $riga): Collection
     {
-        $attive = fn () => Provvigione::query()->where('entrata_uscita', 'Entrata')->where('stato', 'Inserito')->whereNot('importo', 0);
+        $attive = fn () => Provvigione::query()->where('entrata_uscita', 'Entrata')->where('tipo', 'Istituto')->whereNot('importo', 0);
 
         if (filled($riga->codicePratica)) {
             $varianti = $this->varianti($riga->codicePratica);
@@ -204,6 +212,7 @@ class ImportaProformaBanca
     {
         return Provvigione::query()
             ->where('entrata_uscita', 'Entrata')
+            ->where('tipo', 'Istituto')
             ->where('importo', '>', 0)
             ->whereIn('id_pratica', $this->codiciPerNome($riga)->push((string) $riga->codicePratica))
             ->whereRaw('ABS(importo - ?) < 0.005', [abs($riga->importo)])
@@ -272,7 +281,7 @@ class ImportaProformaBanca
     }
 
     /** @param  list<array{riga: RigaProformaBanca, provvigioni: Collection<int, Provvigione>, originale: ?Provvigione}>  $abbinamenti */
-    private function bancaPrevalente(array $abbinamenti): string
+    private function bancaPrevalente(array $abbinamenti, string $nomeFile): string
     {
         $banca = collect($abbinamenti)
             ->flatMap(fn (array $a) => $a['provvigioni']->concat(array_filter([$a['originale']])))
@@ -283,7 +292,46 @@ class ImportaProformaBanca
             ->keys()
             ->first();
 
-        return $banca ?? throw new RuntimeException('Impossibile dedurre la banca: nessuna riga del file corrisponde a una provvigione attiva.');
+        return $banca ?? $this->bancaDalNomeFile($nomeFile)
+            ?? throw new RuntimeException('Impossibile dedurre la banca: nessuna riga del file corrisponde a una provvigione attiva.');
+    }
+
+    /**
+     * I file delle banche si chiamano «<BANCA> FT 148 DEL 23-10-2026 PROFORMA»: il nome prima di «FT» deve stare in quello di un istituto
+     * attivo (o viceversa), oppure avere con esso una parola distintiva in comune («FUCINO SPA» e «BANCA DEL FUCINO»).
+     */
+    private function bancaDalNomeFile(string $nomeFile): ?string
+    {
+        $parte = preg_split('/\s+FT\s*\d/i', pathinfo($nomeFile, PATHINFO_FILENAME))[0] ?? '';
+        $nome = $this->normalizza($parte);
+
+        if (mb_strlen($nome) < 3) {
+            return null;
+        }
+
+        $parole = $this->paroleDistintive($parte);
+        $istituti = $this->sharePoint->banche();
+
+        $trovata = $istituti->first(function (Clienti $c) use ($nome): bool {
+            $cliente = $this->normalizza((string) $c->name);
+
+            return $cliente !== '' && (str_contains($cliente, $nome) || str_contains($nome, $cliente));
+        }) ?? $istituti->first(fn (Clienti $c): bool => array_intersect($parole, $this->paroleDistintive((string) $c->name)) !== []);
+
+        return $trovata?->name;
+    }
+
+    /** @return list<string> */
+    private function paroleDistintive(string $nome): array
+    {
+        $parole = preg_split('/[^a-z0-9]+/', mb_strtolower($nome), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return array_values(array_diff(array_filter($parole, fn (string $p): bool => mb_strlen($p) >= 4), ['banca', 'bank', 'finance', 'spa', 'srl', 'premier']));
+    }
+
+    private function normalizza(string $testo): string
+    {
+        return preg_replace('/[^a-z0-9]/', '', mb_strtolower($testo)) ?? '';
     }
 
     private function aggiornaCodiceBanca(?string $codicePratica, RigaProformaBanca $riga): void
@@ -296,32 +344,61 @@ class ImportaProformaBanca
 
         $pratica = Pratica::query()->where('codice_pratica', $codicePratica)->first();
 
-        if ($pratica !== null && $pratica->codice_pratica !== $codice && $pratica->codice_pratica_banca !== $codice) {
+        if ($pratica !== null && blank($pratica->codice_pratica_banca) && $pratica->codice_pratica !== $codice) {
             $pratica->update(['codice_pratica_banca' => $codice]);
         }
     }
 
-    /** @param  list<string>  $difformita  con difformità il documento è «Anomalo» e la nota di motivazione le elenca (la colonna Stato la mostra) */
+    /**
+     * Il documento della banca: se tra i suoi documenti c'è già lo stesso file lo si aggiorna, altrimenti lo si crea. In entrambi i casi,
+     * se non è ancora su SharePoint, va in PROFORMA / <banca>.
+     *
+     * @param  list<string>  $difformita  con difformità il documento è «Anomalo» e la nota di motivazione le elenca (la colonna Stato la mostra)
+     */
     private function archivia(Clienti $cliente, string $contenuto, string $nomeFile, string $note, array $difformita): Document
     {
-        $documento = Document::query()->create([
-            'documentable_type' => MorphMap::aliasOf($cliente),
-            'documentable_id' => (string) $cliente->getKey(),
-            'document_type_id' => DocumentType::query()->where('code', self::TIPO_DOCUMENTO)->value('id'),
-            'name' => $nomeFile,
-            'channel' => 'upload',
-            'uploaded_by' => Auth::id(),
-            'emitted_at' => now(),
+        $dati = [
             'internal_notes' => $note,
             'status' => $difformita === [] ? DocumentStatus::UPLOADED : DocumentStatus::ANOMALY,
             'rejection_note' => $difformita === [] ? null : implode("\n", $difformita),
-        ]);
+        ];
 
-        AnalyzeUploadedDocument::suspendedWhile(fn () => $documento->addMediaFromString($contenuto)
-            ->usingFileName($nomeFile)
-            ->toMediaCollection(Document::COLLECTION));
+        $documento = $this->giaPresente($cliente, $contenuto, $nomeFile);
+
+        if ($documento !== null) {
+            $documento->update($dati);
+        } else {
+            $documento = Document::query()->create([
+                'documentable_type' => MorphMap::aliasOf($cliente),
+                'documentable_id' => (string) $cliente->getKey(),
+                'document_type_id' => DocumentType::query()->where('code', self::TIPO_DOCUMENTO)->value('id'),
+                'name' => $nomeFile,
+                'channel' => 'upload',
+                'uploaded_by' => Auth::id(),
+                'emitted_at' => now(),
+            ] + $dati);
+
+            AnalyzeUploadedDocument::suspendedWhile(fn () => $documento->addMediaFromString($contenuto)
+                ->usingFileName($nomeFile)
+                ->toMediaCollection(Document::COLLECTION));
+        }
+
+        if ($documento->source_app !== 'sharepoint') {
+            $this->sharePoint->caricaDocumento($documento);
+        }
 
         return $documento;
+    }
+
+    /** Un documento della banca con lo stesso nome e lo stesso contenuto. */
+    private function giaPresente(Clienti $cliente, string $contenuto, string $nomeFile): ?Document
+    {
+        return $cliente->documents()
+            ->where('name', $nomeFile)
+            ->get()
+            ->first(fn (Document $d): bool => ($media = $d->currentMedia()) !== null
+                && is_file($media->getPath())
+                && md5_file($media->getPath()) === md5($contenuto));
     }
 
     /**

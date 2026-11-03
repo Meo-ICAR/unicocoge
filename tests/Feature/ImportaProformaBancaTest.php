@@ -48,7 +48,7 @@ class ImportaProformaBancaTest extends TestCase
         Pratica::create(['codice_pratica' => $codice, 'codice_fiscale' => $cf, 'cognome_cliente' => $cognome, 'nome_cliente' => $nome, 'denominazione_banca' => 'Banca Alfa', 'upload_at' => now()]);
         Provvigione::unguarded(fn () => Provvigione::query()->create([
             'id' => $codice, 'id_pratica' => $codice, 'importo' => $importo,
-            'entrata_uscita' => 'Entrata', 'stato' => 'Inserito', 'istituto_finanziario' => 'Banca Alfa',
+            'entrata_uscita' => 'Entrata', 'tipo' => 'Istituto', 'stato' => 'Inserito', 'istituto_finanziario' => 'Banca Alfa',
         ]));
     }
 
@@ -70,6 +70,7 @@ class ImportaProformaBancaTest extends TestCase
         $this->assertSame('BK-77', Pratica::where('codice_pratica', 'QT1')->value('codice_pratica_banca'));
         $this->assertSame('BK-88', Pratica::where('codice_pratica', 'QT2')->value('codice_pratica_banca'));
         $this->assertSame(['Proforma'], Provvigione::pluck('stato')->unique()->all());
+        $this->assertSame(2, Provvigione::whereNotNull('proforma_id')->count());
         $this->assertEquals(1384.5, Proforma::find($esito->proforma->id)->compenso);
         $this->assertSame('cliente', $esito->documento->documentable_type);
         $this->assertSame(DocumentType::where('code', 'PROFORMA_BANCA')->value('id'), $esito->documento->document_type_id);
@@ -92,11 +93,108 @@ class ImportaProformaBancaTest extends TestCase
         $this->assertStringContainsString('nessuna provvigione attiva trovata', $esito->documento->internal_notes);
         $this->assertSame(DocumentStatus::ANOMALY, $esito->documento->status);
         $this->assertStringContainsString('la banca riconosce € 180,00', $esito->documento->rejection_note);
-        $this->assertSame(['Inserito'], Provvigione::pluck('stato')->unique()->all());
+        $this->assertSame('Proforma', Provvigione::find('QT1')->stato);
+        $this->assertSame('Anomalo', Provvigione::find('QT2')->stato);
         $this->assertSame('BK-77', Pratica::where('codice_pratica', 'QT1')->value('codice_pratica_banca'));
         $this->assertSame('BK-88', Pratica::where('codice_pratica', 'QT2')->value('codice_pratica_banca'));
         $this->assertSame(0, Proforma::count());
         $this->assertStringContainsString('proforma non creato e provvigioni non associate', $esito->documento->internal_notes);
+    }
+
+    public function test_the_bank_code_is_filled_only_when_empty(): void
+    {
+        $this->pratica('QT1', 'RSSMRA80A01H501U', 'Rossi', '150.00');
+        Pratica::where('codice_pratica', 'QT1')->update(['codice_pratica_banca' => 'GIA-PRESENTE']);
+
+        $this->importa("Pratica;Codice fiscale;Provvigione\nBK-77;RSSMRA80A01H501U;150,00\n");
+
+        $this->assertSame('GIA-PRESENTE', Pratica::where('codice_pratica', 'QT1')->value('codice_pratica_banca'));
+    }
+
+    public function test_only_commissions_of_type_istituto_are_checked(): void
+    {
+        $this->pratica('QT1', 'RSSMRA80A01H501U', 'Rossi', '150.00');
+        Provvigione::where('id', 'QT1')->update(['tipo' => 'Agente']);
+
+        $this->expectException(RuntimeException::class);
+
+        $this->importa("Pratica;Codice fiscale;Provvigione\nBK-77;RSSMRA80A01H501U;150,00\n");
+    }
+
+    public function test_the_same_file_is_not_stored_twice_among_the_bank_documents(): void
+    {
+        $this->pratica('QT1', 'RSSMRA80A01H501U', 'Rossi', '150.00');
+        $csv = "Pratica;Codice fiscale;Provvigione\nBK-77;RSSMRA80A01H501U;150,00\n";
+
+        $primo = $this->importa($csv);
+        $secondo = $this->importa($csv);
+
+        $this->assertSame($primo->documento->id, $secondo->documento->id);
+        $this->assertSame(1, Document::where('name', 'banca.csv')->count());
+    }
+
+    public function test_a_known_layout_is_read_without_the_ai(): void
+    {
+        $lettore = new class extends LettoreProformaBanca
+        {
+            protected function leggiConAi(string $contenuto, string $mime): array
+            {
+                throw new RuntimeException('AI non prevista');
+            }
+        };
+
+        $agos = "PV0011C                   AGOS DUCATO S.P.A.                          01/10/2026\n"
+            ."79302092 07/09/2026 RACANO ROBERTO    4,22    5.000,00      211,00        0,00\n";
+        $righe = $lettore->leggi($agos, 'AGOS FT 146 PROFORMA.txt', 'text/plain');
+        $this->assertSame('79302092', $righe[0]->codicePratica);
+        $this->assertSame(211.0, $righe[0]->importo);
+
+        $modelli = new \App\Services\ProformaBanca\ModelliProformaBanca;
+        $this->assertSame('fucino', $modelli->riconosci('FUCINO FINANCE SPA ...'));
+        $fucino = $modelli->leggiTesto("FUCINO FINANCE SPA\nIOSUB ELENA                    CLM: 33.360,00 % Provv.:  7,0020039099    2.335,20\n");
+        $this->assertSame('20039099', $fucino[0]->codicePratica);
+        $this->assertSame(2335.2, $fucino[0]->importo);
+
+        $ibl = $modelli->leggiTesto("Tipo NumeroCognomeNome CapitalePr % Provv.\nC 945072\nDE\nANGELIS\nCAMILLA\n€\n55.440,00\n% 3,000€ 1.663,20\nP 1002816POLITOMARGHERITA\n€\n43.320,00\n% 4,000€ 1.732,80\nTotale capitale: € 98.760,00\nTotale provvigione: € 3.396,00");
+        $this->assertSame(['945072', '1002816'], array_map(fn ($r) => $r->codicePratica, $ibl));
+        $this->assertSame([1663.2, 1732.8], array_map(fn ($r) => $r->importo, $ibl));
+
+        $capitalfin = $modelli->leggiTesto("CAP.ITAL.FIN. SPA\n5062644\tRIZZO RAFFAELE\t646,80 €\n5053880\tSTORNO BUZZERIO ARMANDO\t-1.916,64 €\n");
+        $this->assertSame(-1916.64, $capitalfin[1]->importo);
+    }
+
+    public function test_the_bank_folders_are_created_under_proforma_for_active_non_dummy_banks_only(): void
+    {
+        DB::table('clientis')->insert([
+            ['name' => 'Banca Spenta', 'piva' => '01234567891', 'is_active' => false],
+            ['name' => 'Banca Finta', 'piva' => '01234567892', 'is_dummy' => true],
+        ]);
+        config(['unico-core.sharepoint.drive_id' => 'DRIVE1']);
+
+        $graph = new class implements \Unico\Core\SharePoint\GraphTransport
+        {
+            public array $post = [];
+
+            public function put(string $url, string $bytes, array $headers = [], bool $authenticated = true): array
+            {
+                return ['status' => 200, 'json' => [], 'body' => ''];
+            }
+
+            public function post(string $url, array $data): array
+            {
+                $this->post[] = [$url, $data['name']];
+
+                return ['status' => $data['name'] === 'PROFORMA' ? 409 : 201, 'json' => [], 'body' => ''];
+            }
+        };
+
+        $cartelle = new \App\Services\ProformaBanca\CartelleProformaSharePoint(new \Unico\Core\SharePoint\SharePointUploader($graph), $graph);
+        $esito = $cartelle->creaPerBanche($cartelle->banche());
+
+        $this->assertSame(['Banca Alfa'], $esito['create']);
+        $this->assertSame('https://graph.microsoft.com/v1.0/drives/DRIVE1/root/children', $graph->post[0][0]);
+        $this->assertSame('https://graph.microsoft.com/v1.0/drives/DRIVE1/root:/PROFORMA:/children', $graph->post[1][0]);
+        $this->assertSame(['PROFORMA', 'Banca Alfa'], $cartelle->cartelleDi('Banca Alfa'));
     }
 
     public function test_a_file_that_matches_no_active_commission_is_refused(): void
@@ -211,7 +309,7 @@ class ImportaProformaBancaTest extends TestCase
         $this->pratica('QT7011', 'BZZRND60A01H501X', 'ARMANDO', '1916.64', 'BUZZERIO');
         Provvigione::query()->where('id', 'QT7011')->update(['stato' => 'Pagato']);
         Provvigione::unguarded(fn () => Provvigione::query()->create([
-            'id' => 'QT7011-', 'id_pratica' => 'QT7011', 'importo' => '-1916.64', 'entrata_uscita' => 'Entrata',
+            'id' => 'QT7011-', 'id_pratica' => 'QT7011', 'importo' => '-1916.64', 'entrata_uscita' => 'Entrata', 'tipo' => 'Istituto',
             'stato' => 'Inserito', 'status_compenso' => 'Pratica stornata', 'istituto_finanziario' => 'Banca Alfa',
         ]));
 
@@ -257,7 +355,7 @@ class ImportaProformaBancaTest extends TestCase
         $this->pratica('QT1', 'RSSMRA80A01H501U', 'Rossi', '100.00', 'Mario');
         $this->pratica('QT7011', 'BZZRND60A01H501X', 'ARMANDO', '1916.64', 'BUZZERIO');
         Provvigione::unguarded(fn () => Provvigione::query()->create([
-            'id' => 'QT7011-', 'id_pratica' => 'QT7011', 'importo' => '-1916.64', 'entrata_uscita' => 'Entrata',
+            'id' => 'QT7011-', 'id_pratica' => 'QT7011', 'importo' => '-1916.64', 'entrata_uscita' => 'Entrata', 'tipo' => 'Istituto',
             'stato' => 'Pagato', 'istituto_finanziario' => 'Banca Alfa',
         ]));
 

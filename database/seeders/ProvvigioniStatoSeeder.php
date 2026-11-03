@@ -14,7 +14,7 @@ class ProvvigioniStatoSeeder extends Seeder
      */
     public function run(): void
     {
-        $stati = ['', 'Annullato', 'Coordinamento', 'Escluso', 'Fatturato', 'Inserito', 'Pagato', 'Proforma', 'Sospeso', 'Stornato'];
+        $stati = ['', 'Anomalo', 'Annullato', 'Coordinamento', 'Escluso', 'Fatturato', 'Inserito', 'Pagato', 'Proforma', 'Sospeso', 'Stornato'];
 
         foreach ($stati as $stato) {
             ProvvigioniStato::updateOrCreate(['stato' => $stato]);

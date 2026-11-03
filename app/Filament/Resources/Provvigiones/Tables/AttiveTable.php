@@ -112,6 +112,7 @@ class AttiveTable
                     ->color(fn (string $state): string => match ($state) {
                         'Inserito' => 'warning',
                         'Sospeso' => 'danger',
+                        'Anomalo' => 'danger',
                         default => 'gray',
                     })
                     ->sortable(),
@@ -146,7 +147,7 @@ class AttiveTable
                 TextColumn::make('id_pratica')
                     ->label('Pratica')
                     ->color('info')
-                    ->url(fn ($record) => PraticaResource::getUrl('view', ['record' => $record->id_pratica]))
+                    ->url(fn ($record) => $record->pratica_id ? PraticaResource::getUrl('view', ['record' => $record->pratica_id]) : null)
                     ->openUrlInNewTab()
                     ->searchable(),
                 TextColumn::make('descrizione'),
@@ -192,9 +193,10 @@ class AttiveTable
                         'Escluso' => 'Escluso',
                         'Fatturato' => 'Fatturato',
                         'Stornato' => 'Stornato',
+                        'Anomalo' => 'Anomalo',
                     ])
                     ->multiple()
-                    ->default(['Inserito', 'Sospeso'])
+                    ->default(['Inserito', 'Sospeso', 'Anomalo'])
                     ->placeholder('Tutti gli stati'),
                 SelectFilter::make('descrizione')
                     ->options([
