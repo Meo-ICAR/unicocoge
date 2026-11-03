@@ -21,6 +21,7 @@ class MonthlyProvvigioniCommandsTest extends TestCase
     public function test_maturate_check_is_a_status_check_and_proformas_send_is_whitelisted_with_cc(): void
     {
         $this->assertInstanceOf(StatusCheckCommand::class, $this->app->make(CheckProvvigioniMaturate::class));
-        $this->assertSame(['cc', 'dry-run'], config('schedulable_commands')['proformas:send-pending']['options']);
+        $this->assertSame(['cc', 'dry-run', 'genera'], config('schedulable_commands')['proformas:send-pending']['options']);
+        $this->assertSame(['dry-run', 'solo-attivi'], config('schedulable_commands')['proformas:generate-pending']['options']);
     }
 }

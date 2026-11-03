@@ -67,7 +67,11 @@ return [
     ],
     'proformas:send-pending' => [
         'description' => 'Invia ai produttori i proforma in stato Inserito non ancora spediti; cc = indirizzi in copia conoscenza (separati da virgola).',
-        'options' => ['cc', 'dry-run'],
+        'options' => ['cc', 'dry-run', 'genera'],
+    ],
+    'proformas:generate-pending' => [
+        'description' => 'Crea i proforma dalle provvigioni maturate dei produttori (tipo Agente, non di coordinamento, stato Inserito) e vi associa le provvigioni; dry-run = elenca senza scrivere; solo-attivi = 1 (predefinito) solo produttori attivi, 0 anche i non attivi.',
+        'options' => ['dry-run', 'solo-attivi'],
     ],
     'manual:sync' => [
         'description' => 'Reindicizza il manuale operativo per l\'assistente AI.',

@@ -76,6 +76,12 @@ class FornitoresTable
             ])
             ->filters([
                 TrashedFilter::make(),
+                TernaryFilter::make('is_active')
+                    ->label('Attivo')
+                    ->placeholder('Tutti')
+                    ->trueLabel('Solo attivi')
+                    ->falseLabel('Solo non attivi')
+                    ->default(true),
                 TernaryFilter::make('email')
                     ->label('Email')
                     ->placeholder('Tutti')

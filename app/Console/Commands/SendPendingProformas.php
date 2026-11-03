@@ -9,12 +9,17 @@ class SendPendingProformas extends Command
 {
     protected $signature = 'proformas:send-pending
                             {--cc= : Indirizzi in copia conoscenza, separati da virgola}
+                            {--genera : Prima crea i proforma dalle provvigioni maturate dei produttori (proformas:generate-pending)}
                             {--dry-run : Elenca i proforma che partirebbero, senza inviare}';
 
     protected $description = 'Invia ai produttori i proforma in stato «Inserito» non ancora spediti (copia conoscenza opzionale)';
 
     public function handle(): int
     {
+        if ($this->option('genera')) {
+            $this->call('proformas:generate-pending', ['--dry-run' => (bool) $this->option('dry-run')]);
+        }
+
         $cc = array_values(array_filter(array_map('trim', explode(',', (string) $this->option('cc')))));
         $sent = 0;
         $failed = 0;
