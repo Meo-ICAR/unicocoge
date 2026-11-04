@@ -62,7 +62,7 @@ class PurchaseCreditNoteImportService
             ]);
 
             // Read Excel file
-            $data = Excel::toArray([], $filePath);
+            $data = Excel::toArray(new \App\Imports\RawArrayImport, $filePath);
 
             if (empty($data) || ! isset($data[0])) {
                 throw new \Exception('File is empty or invalid format');

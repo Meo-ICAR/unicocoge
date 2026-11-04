@@ -69,7 +69,7 @@ class SalesInvoiceImportService
 
         try {
             // Read Excel file using Excel facade
-            $data = Excel::toArray([], $actualFilePath);
+            $data = Excel::toArray(new \App\Imports\RawArrayImport, $actualFilePath);
 
             if (empty($data) || empty($data[0])) {
                 throw new \Exception('Cannot read data from Excel file');
@@ -218,7 +218,7 @@ class SalesInvoiceImportService
             'document_residual_amount' => $this->parseDecimal($row['Importo_residuo_documento'] ?? null),
             'document_type' => $this->cleanString($row['Tipo_di_documento_Fattura'] ?? null),
             'credit_note_linked' => $this->cleanString($row['Nota_di_Credito_Collegata'] ?? null),
-            'in_order' => $this->parseBoolean($row['Flg_In_Commessa'] ?? null),
+            'in_order' => (bool) $this->parseBoolean($row['Flg_In_Commessa'] ?? null),
             'supplier_number' => $this->cleanString($row['Nr._fornitore'] ?? null),
             'supplier_description' => $this->cleanString($row['Descrizione_Fornitore'] ?? null),
             'purchase_invoice_origin' => $this->cleanString($row['Fattura_Acquisto_Origine'] ?? null),

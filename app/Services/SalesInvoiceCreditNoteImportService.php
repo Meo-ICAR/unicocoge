@@ -69,7 +69,7 @@ class SalesInvoiceCreditNoteImportService
 
         try {
             // Read Excel file using Excel facade
-            $data = Excel::toArray([], $actualFilePath);
+            $data = Excel::toArray(new \App\Imports\RawArrayImport, $actualFilePath);
 
             if (empty($data) || empty($data[0])) {
                 throw new \Exception('Cannot read data from Excel file');
