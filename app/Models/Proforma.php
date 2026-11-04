@@ -89,22 +89,34 @@ class Proforma extends Model
     {
         return $query
             ->where('proformas.tipo', 'Agente')
-            ->whereIn('proformas.fornitori_id', Fornitore::withoutGlobalScopes()->where('piva', $this->partitaIvaOrNull($fattura->vat_number))->select('id'))
+            ->whereIn('proformas.fornitori_id', Fornitore::withoutGlobalScopes()->whereIn('piva', $this->partiteIvaVarianti($fattura->vat_number))->select('id'))
             ->whereNotNull('proformas.sended_at')
             ->whereDate('proformas.sended_at', '<=', $fattura->registration_date ?? '1900-01-01');
     }
 
     /**
-     * Proforma abbinabili a una fattura di vendita: sono quelle dell'istituto (cliente) con la stessa partita IVA della fattura, purché non sia un
-     * cliente fittizio (`is_dummy`), e inviate in una data non successiva a quella di registrazione.
+     * Proforma abbinabili a una fattura di vendita: sono quelle dell'istituto (cliente) con la stessa partita IVA della fattura, compresi i clienti
+     * fittizi (`is_dummy`): le provvigioni delle pratiche fanno capo a loro e la partita IVA li lega alla fattura. Inviate in una data non successiva a quella di registrazione.
      */
     public function scopeAbbinabiliAFatturaVendita(Builder $query, SalesInvoice $fattura): Builder
     {
         return $query
             ->where('proformas.tipo', 'Istituto')
-            ->whereIn('proformas.fornitori_id', Clienti::withoutGlobalScopes()->where('piva', $this->partitaIvaOrNull($fattura->vat_number))->where('is_dummy', false)->select('id'))
+            ->whereIn('proformas.fornitori_id', Clienti::withoutGlobalScopes()->whereIn('piva', $this->partiteIvaVarianti($fattura->vat_number))->select('id'))
             ->whereNotNull('proformas.sended_at')
             ->whereDate('proformas.sended_at', '<=', $fattura->registration_date ?? '1900-01-01');
+    }
+
+    /**
+     * La partita IVA con e senza prefisso `IT`: nelle fatture e nell'anagrafica può essere salvata nell'uno o nell'altro modo.
+     *
+     * @return array<int, string>
+     */
+    private function partiteIvaVarianti(?string $partitaIva): array
+    {
+        $numero = preg_replace('/^IT/i', '', $this->partitaIvaOrNull($partitaIva));
+
+        return $numero === "\0" ? ["\0"] : [$numero, 'IT'.$numero];
     }
 
     /** Una partita IVA vuota non deve mai coincidere con i fornitori o i clienti che non ce l'hanno. */

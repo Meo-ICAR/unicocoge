@@ -13,7 +13,7 @@ class ProformaInvoiceMatchingService
      * Abbina i proforma alle fatture di vendita.
      *
      * Regole di abbinabilità (Proforma::abbinabiliAFatturaVendita): il proforma è di un istituto (cliente) con la stessa partita IVA della
-     * fattura, purché non sia un cliente fittizio (`is_dummy`), e la fattura non è precedente al proforma (data di registrazione >= data di invio).
+     * fattura (anche se il cliente è fittizio, `is_dummy`: le provvigioni fanno capo a lui), e la fattura non è precedente al proforma (data di registrazione >= data di invio).
      * Tra i proforma abbinabili si collega in automatico quello con lo stesso importo (compenso + anticipo + contributo, tolleranza di 10 euro).
      * Una fattura è candidata se non ha ancora un proforma: lo stato `closed` non conta.
      *

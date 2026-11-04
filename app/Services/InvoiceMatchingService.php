@@ -10,7 +10,7 @@ use App\Models\Provvigione;
  * di provvigione la fattura è diversa e si arriva ad essa per strade diverse:
  *
  *   Agente   → proforma del fornitore → fattura di acquisto (stessa partita IVA del fornitore, fattura non precedente al proforma);
- *   Istituto → proforma dell'istituto (clientis) → fattura di vendita (stessa partita IVA, cliente non fittizio, fattura non precedente);
+ *   Istituto → proforma dell'istituto (clientis) → fattura di vendita (stessa partita IVA, anche se il cliente è fittizio, fattura non precedente);
  *   Cliente  → senza proforma: codice fiscale della pratica → cliente (`clients.tax_code`) → fattura di vendita a persona (nome e importo).
  *
  * Fattura emessa = `Pagato`: ogni abbinamento porta a `Pagato` le provvigioni coinvolte. Una fattura già abbinata (a un proforma o a una
