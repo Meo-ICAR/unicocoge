@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\ModelFieldIntrospector;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
@@ -17,7 +18,7 @@ class LatestModelRecordApiController extends Controller
      * arrivata l'ultima sincronizzazione (es. l'ultima registration_date
      * di sales_invoice).
      */
-    public function show(string $model, ModelFieldIntrospector $introspector): JsonResponse
+    public function show(Request $request, string $model, ModelFieldIntrospector $introspector): JsonResponse
     {
         try {
             $modelClass = $introspector->resolveModelClass($model);
@@ -30,8 +31,15 @@ class LatestModelRecordApiController extends Controller
         $hasCreatedAt = Schema::connection($instance->getConnectionName())
             ->hasColumn($instance->getTable(), 'created_at');
 
+        // `?order_by=registration_date`: ordina per un'altra colonna del modello (es. la data della fattura, non quella di caricamento).
+        $orderBy = (string) $request->query('order_by', '');
+
+        if ($orderBy !== '' && ! $columnNames->contains($orderBy)) {
+            return response()->json(['message' => "Colonna '{$orderBy}' non disponibile per il modello."], 422);
+        }
+
         $record = $modelClass::query()
-            ->orderByDesc($hasCreatedAt ? 'created_at' : $instance->getKeyName())
+            ->orderByDesc($orderBy !== '' ? $orderBy : ($hasCreatedAt ? 'created_at' : $instance->getKeyName()))
             ->first();
 
         if (! $record) {
