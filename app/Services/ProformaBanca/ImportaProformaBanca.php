@@ -130,6 +130,7 @@ class ImportaProformaBanca
                 ->reject(fn (Provvigione $p): bool => isset($usate[$p->id]) || ($storno && (float) $p->importo >= 0))
                 ->values();
             $esatte = $candidate->filter(fn (Provvigione $p): bool => $this->centesimi((float) $p->importo) === $this->centesimi($riga->importo));
+            $esatte = $esatte->sortByDesc(fn (Provvigione $p): bool => $p->stato === 'Inserito')->values();
             $scelte = $esatte->isNotEmpty() ? collect([$esatte->first()]) : $candidate;
 
             foreach ($scelte as $provvigione) {
