@@ -197,15 +197,35 @@ class ImportaProformaBanca
 
         $piuLunga = collect($parole)->sortByDesc(fn (string $p): int => mb_strlen($p))->first();
 
-        return Pratica::query()
+        $pratiche = Pratica::query()
             ->where(fn ($q) => $q->whereRaw('LOWER(cognome_cliente) LIKE ?', ["%{$piuLunga}%"])->orWhereRaw('LOWER(nome_cliente) LIKE ?', ["%{$piuLunga}%"]))
-            ->get(['codice_pratica', 'cognome_cliente', 'nome_cliente'])
-            ->filter(function (Pratica $pratica) use ($parole): bool {
-                $della = $this->parole($pratica->cognome_cliente.' '.$pratica->nome_cliente);
+            ->get(['codice_pratica', 'cognome_cliente', 'nome_cliente']);
 
-                return $della !== [] && array_diff($della, $parole) === [] && array_diff($parole, $della) === [];
-            })
-            ->pluck('codice_pratica');
+        $esatte = $pratiche->filter(function (Pratica $pratica) use ($parole): bool {
+            $della = $this->parole($pratica->cognome_cliente.' '.$pratica->nome_cliente);
+
+            return $della !== [] && array_diff($della, $parole) === [] && array_diff($parole, $della) === [];
+        });
+
+        // Le banche tagliano i nominativi («BENEDETTI MATTI», «ELKHOLY»): se nessuna pratica ha esattamente quelle parole, vale quella
+        // di cui ogni parola della riga è l'inizio di una parola diversa del cliente (l'importo esatto poi sceglie la provvigione).
+        $risultato = $esatte->isNotEmpty() ? $esatte : $pratiche->filter(function (Pratica $pratica) use ($parole): bool {
+            $della = $this->parole($pratica->cognome_cliente.' '.$pratica->nome_cliente);
+
+            foreach ($parole as $parola) {
+                $indice = collect($della)->search(fn (string $p): bool => str_starts_with($p, $parola));
+
+                if ($indice === false) {
+                    return false;
+                }
+
+                unset($della[$indice]);
+            }
+
+            return true;
+        });
+
+        return $risultato->pluck('codice_pratica');
     }
 
     /** Lo storno chiede la restituzione di una provvigione già incassata: la sua originale, positiva e dello stesso importo. */

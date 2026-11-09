@@ -99,12 +99,19 @@ class ModelliProformaBanca
         ])]));
     }
 
-    /** @return list<?RigaProformaBanca> «79302092 07/09/2026 RACANO ROBERTO    4,22    5.000,00      211,00        0,00» */
+    /**
+     * @return list<?RigaProformaBanca> «79302092 07/09/2026 RACANO ROBERTO    4,22    5.000,00      211,00        0,00»: la banca riconosce la
+     *                                  provvigione più il fisso pratica (ultima colonna), che in alcune pratiche è l'unico importo.
+     */
     private function agos(string $testo): array
     {
-        preg_match_all('/^\s*(\d{6,10})\s+\d{2}\/\d{2}\/\d{4}\s+(.+?)\s+\d+,\d{2}\s+[\d.]+,\d{2}\s+(-?[\d.]+,\d{2})\s+[\d.]+,\d{2}\s*$/m', $testo, $m, PREG_SET_ORDER);
+        preg_match_all('/^\s*(\d{6,10})\s+\d{2}\/\d{2}\/\d{4}\s+(.+?)\s+\d+,\d{2}\s+[\d.]+,\d{2}\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})\s*$/m', $testo, $m, PREG_SET_ORDER);
 
-        return array_map(fn (array $r): ?RigaProformaBanca => RigaProformaBanca::da(['codice_pratica' => $r[1], 'cognome' => $r[2], 'importo' => $r[3]]), $m);
+        return array_map(fn (array $r): ?RigaProformaBanca => RigaProformaBanca::da([
+            'codice_pratica' => $r[1],
+            'cognome' => $r[2],
+            'importo' => (LettoreProformaBanca::numero($r[3]) ?? 0.0) + (LettoreProformaBanca::numero($r[4]) ?? 0.0),
+        ]), $m);
     }
 
     /** @return list<?RigaProformaBanca> «5053880 STORNO BUZZERIO ARMANDO -1.916,64 €» */
