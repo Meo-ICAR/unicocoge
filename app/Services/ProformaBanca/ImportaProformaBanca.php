@@ -197,9 +197,16 @@ class ImportaProformaBanca
 
         $piuLunga = collect($parole)->sortByDesc(fn (string $p): int => mb_strlen($p))->first();
 
-        $pratiche = Pratica::query()
-            ->where(fn ($q) => $q->whereRaw('LOWER(cognome_cliente) LIKE ?', ["%{$piuLunga}%"])->orWhereRaw('LOWER(nome_cliente) LIKE ?', ["%{$piuLunga}%"]))
+        $cerca = fn (string $testo) => Pratica::query()
+            ->where(fn ($q) => $q->whereRaw('LOWER(cognome_cliente) LIKE ?', ["%{$testo}%"])->orWhereRaw('LOWER(nome_cliente) LIKE ?', ["%{$testo}%"]))
             ->get(['codice_pratica', 'cognome_cliente', 'nome_cliente']);
+
+        $pratiche = $cerca($piuLunga);
+
+        // Cognome e nome attaccati: la parola intera non compare in nessun campo, ne basta l'inizio.
+        if ($pratiche->isEmpty() && mb_strlen($piuLunga) > 6) {
+            $pratiche = $cerca(mb_substr($piuLunga, 0, 6));
+        }
 
         $esatte = $pratiche->filter(function (Pratica $pratica) use ($parole): bool {
             $della = $this->parole($pratica->cognome_cliente.' '.$pratica->nome_cliente);
@@ -224,6 +231,18 @@ class ImportaProformaBanca
 
             return true;
         });
+
+        // Nei PDF di alcune banche cognome e nome sono attaccati («MASCIULLIGIOVANNI»): ultima possibilità, il nominativo senza spazi
+        // coincide con cognome e nome del cliente, in un ordine o nell'altro.
+        if ($risultato->isEmpty()) {
+            $attaccate = implode('', $parole);
+            $risultato = $pratiche->filter(function (Pratica $pratica) use ($attaccate): bool {
+                $cognome = implode('', $this->parole((string) $pratica->cognome_cliente));
+                $nome = implode('', $this->parole((string) $pratica->nome_cliente));
+
+                return $attaccate !== '' && in_array($attaccate, [$cognome.$nome, $nome.$cognome], true);
+            });
+        }
 
         return $risultato->pluck('codice_pratica');
     }
